@@ -103,27 +103,36 @@ const VoiceInput = {
     try {
       // Procesar cada resultado
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        // Validar que existe el resultado y tiene transcript
+        // Validar que existe el resultado
         if (!event.results[i]) {
           console.warn(`⚠️ Resultado[${i}] es undefined`);
           continue;
         }
 
-        if (!event.results[i].transcript) {
-          console.warn(`⚠️ Resultado[${i}].transcript es undefined`);
+        // event.results[i] es un SpeechRecognitionResult (array de alternativas)
+        // Acceder a la primera alternativa [0] y su propiedad transcript
+        const result = event.results[i];
+        const isFinal = result.isFinal || false;
+
+        // Obtener el transcript de la primera alternativa
+        let transcript = '';
+        if (result && result.length > 0 && result[0] && result[0].transcript) {
+          transcript = result[0].transcript.trim();
+        }
+
+        if (!transcript) {
+          console.warn(`⚠️ Sin transcript en Resultado[${i}]`);
           continue;
         }
 
-        const transcript = event.results[i].transcript.trim();
-
-        if (!transcript) continue; // Saltar si está vacío
-
-        if (event.results[i].isFinal) {
+        if (isFinal) {
           // Texto final (confirmado por el navegador)
           final += transcript + ' ';
+          console.log(`✅ Final: "${transcript}"`);
         } else {
           // Texto interim (se está diciendo)
           interim += transcript + ' ';
+          console.log(`📝 Interim: "${transcript}"`);
         }
       }
 
