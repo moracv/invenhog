@@ -1,296 +1,458 @@
 // InvenHogar - Voice Recognition Module
-// Basado en Web Speech API (Chrome, Edge, Android)
+// Web Speech API para entrada de voz en tiempo real
 
 const VoiceInput = {
   recognition: null,
   isRecording: false,
   interimText: '',
   finalText: '',
-  allTranscripts: [],
+  lastProcessedText: '',
 
-  normalizedFields: {
-    nombre: ['nombre', 'producto', 'articulo', 'item'],
+  // Campos y palabras clave
+  fieldKeywords: {
+    nombre: ['nombre', 'producto', 'articulo', 'item', 'cosa'],
     categoria: ['categoria', 'tipo', 'clase'],
-    subcategoria: ['subcategoria', 'sub', 'especifico'],
-    ubicacion: ['ubicacion', 'lugar', 'donde', 'guardado', 'ubicado'],
-    cantidad: ['cantidad', 'cuanto', 'cuantos', 'cuanta', 'numero'],
-    unidad: ['unidad', 'tipo unidad', 'medida'],
+    subcategoria: ['subcategoria', 'sub'],
+    ubicacion: ['ubicacion', 'lugar', 'donde', 'guardado', 'ubicado', 'piso', 'estante'],
+    cantidad: ['cantidad', 'cuanto', 'cuantos', 'cuanta', 'numero', 'hay'],
+    unidad: ['unidad', 'unidades', 'piezas', 'cajas', 'rollos', 'litros', 'kilos', 'metros'],
     stockmin: ['stock minimo', 'minimo', 'alerta', 'reserva'],
-    precio: ['precio', 'costo', 'valor'],
-    fuente: ['fuente', 'donde compre', 'comprado', 'tienda', 'origen'],
+    precio: ['precio', 'costo', 'valor', 'cuesta', 'paga'],
+    fuente: ['fuente', 'tienda', 'comprado', 'compre', 'origen'],
+    notas: ['nota', 'notas', 'comentario'],
   },
 
+  /**
+   * Inicializar reconocimiento de voz
+   */
   init() {
+    // Verificar soporte del navegador
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      console.warn('Speech Recognition no soportado');
-      const btn = document.getElementById('voice-record-btn');
-      if (btn) btn.disabled = true;
-      App.showToast('Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge.', 'error');
+      console.error('❌ Speech Recognition no soportado en este navegador');
+      this.disableVoiceButtons('Tu navegador no soporta voz. Usa Chrome, Edge o Safari.');
       return false;
     }
 
-    this.recognition = new SR();
-    this.recognition.continuous = true;
-    this.recognition.interimResults = true;
-    this.recognition.lang = 'es-ES';
+    try {
+      this.recognition = new SR();
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+      this.recognition.lang = 'es-ES';
+      this.recognition.maxAlternatives = 1;
 
-    this.recognition.onstart = () => {
-      this.isRecording = true;
-      this.allTranscripts = [];
-      this.updateUI();
-    };
+      // Eventos
+      this.recognition.onstart = () => this.onStart();
+      this.recognition.onresult = (e) => this.onResult(e);
+      this.recognition.onerror = (e) => this.onError(e);
+      this.recognition.onend = () => this.onEnd();
 
-    this.recognition.onresult = (e) => this.onResult(e);
-    this.recognition.onerror = (e) => this.onError(e);
-    this.recognition.onend = () => {
-      this.isRecording = false;
-      this.updateUI();
-    };
-
-    return true;
+      console.log('✅ Voice Recognition iniciado correctamente');
+      return true;
+    } catch (err) {
+      console.error('❌ Error al inicializar Voice Recognition:', err);
+      this.disableVoiceButtons('Error al inicializar micrófono');
+      return false;
+    }
   },
 
+  /**
+   * Deshabilitar botones de voz
+   */
+  disableVoiceButtons(reason) {
+    const buttons = document.querySelectorAll('[id*="voice"], [id*="record"]');
+    buttons.forEach(btn => {
+      btn.disabled = true;
+      btn.title = reason;
+    });
+  },
+
+  /**
+   * Cuando inicia la grabación
+   */
+  onStart() {
+    this.isRecording = true;
+    this.interimText = '';
+    this.finalText = '';
+    this.lastProcessedText = '';
+    this.updateUI();
+    console.log('🎤 Grabación iniciada');
+  },
+
+  /**
+   * Cuando termina la grabación
+   */
+  onEnd() {
+    this.isRecording = false;
+    this.updateUI();
+    console.log('⏹️ Grabación detenida');
+  },
+
+  /**
+   * Procesar resultados de reconocimiento
+   */
   onResult(event) {
+    if (!event || !event.results) {
+      console.warn('⚠️ Evento sin resultados');
+      return;
+    }
+
     let interim = '';
     let final = '';
 
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i].transcript.trim();
-      if (event.results[i].isFinal) {
-        final += transcript + ' ';
-      } else {
-        interim += transcript;
+    try {
+      // Procesar cada resultado
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i].transcript.trim();
+
+        if (event.results[i].isFinal) {
+          // Texto final (confirmado por el navegador)
+          final += transcript + ' ';
+        } else {
+          // Texto interim (se está diciendo)
+          interim += transcript + ' ';
+        }
       }
-    }
 
-    // Actualizar texto interim (lo que se está diciendo ahora)
-    this.interimText = interim;
-    this.updateLiveText();
+      // Actualizar texto interim en tiempo real
+      this.interimText = interim.trim();
+      this.updateDisplayText();
 
-    // Procesar texto final
-    if (final.trim()) {
-      this.finalText = final.trim();
-      this.allTranscripts.push(this.finalText);
-      this.processCommand(this.finalText.toLowerCase());
+      // Procesar texto final
+      if (final.trim() && final.trim() !== this.lastProcessedText) {
+        this.finalText = final.trim();
+        this.lastProcessedText = final.trim();
+        this.processVoiceCommand(this.finalText);
+      }
+    } catch (err) {
+      console.error('❌ Error procesando resultado:', err);
     }
   },
 
+  /**
+   * Manejar errores de micrófono
+   */
   onError(event) {
-    const messages = {
-      'network': 'Error de red',
-      'no-speech': 'Sin entrada de voz',
-      'audio-capture': 'Micrófono no disponible',
+    const errorMessages = {
+      'network': '❌ Error de conexión de red',
+      'no-speech': '⚠️ No se detectó voz. Intenta de nuevo.',
+      'audio-capture': '❌ Micrófono no disponible. Revisa permisos.',
+      'not-allowed': '❌ Acceso al micrófono denegado. Revisa permisos en tu navegador.',
+      'permission-denied': '❌ Permiso denegado. Necesitas permitir acceso al micrófono.',
+      'bad-grammar': '⚠️ No se entiendió bien. Habla más claro.',
+      'service-not-allowed': '❌ Servicio no permitido en esta URL. Usa HTTPS o localhost.',
     };
-    App.showToast(messages[event.error] || `Error: ${event.error}`, 'error');
+
+    const message = errorMessages[event.error] || `❌ Error: ${event.error}`;
+    console.error(message);
+
+    if (App && App.showToast) {
+      App.showToast(message, 'error');
+    }
+
+    // Intentar reintentar si es un error transitorio
+    if (event.error === 'no-speech' || event.error === 'audio-capture') {
+      setTimeout(() => {
+        if (this.isRecording) {
+          console.log('🔄 Reintentando captura de audio...');
+          this.recognition.abort();
+          this.start();
+        }
+      }, 500);
+    }
   },
 
-  processCommand(text) {
-    // Detectar qué formulario está activo
+  /**
+   * Actualizar display de texto en tiempo real
+   */
+  updateDisplayText() {
+    const displayEl = document.getElementById('voice-recording-text');
+    if (!displayEl) {
+      console.warn('⚠️ Elemento de display no encontrado');
+      return;
+    }
+
+    try {
+      let html = '';
+
+      // Texto final (ya procesado)
+      if (this.finalText) {
+        html += `<span style="color: #111827; font-weight: 500;">${this.escapeHtml(this.finalText)}</span>`;
+        if (this.interimText) html += ' ';
+      }
+
+      // Texto interim (se está diciendo ahora)
+      if (this.interimText) {
+        html += `<span style="color: #3B82F6; font-style: italic; font-weight: 500;">${this.escapeHtml(this.interimText)}</span>`;
+      }
+
+      // Si no hay texto
+      if (!html) {
+        html = '<span style="color: #9CA3AF; font-style: italic;">(escuchando...)</span>';
+      }
+
+      displayEl.innerHTML = html;
+    } catch (err) {
+      console.error('❌ Error actualizando display:', err);
+    }
+  },
+
+  /**
+   * Procesar comando de voz y llenar campos
+   */
+  processVoiceCommand(text) {
+    if (!text || text.length < 2) return;
+
+    // Obtener formulario activo
     const voiceForm = document.getElementById('voice-product-form');
     const regularForm = document.getElementById('product-form');
-    const form = voiceForm && voiceForm.offsetParent !== null ? voiceForm : regularForm;
+    const form = (voiceForm && voiceForm.offsetParent !== null) ? voiceForm : regularForm;
 
-    if (!form || !form.elements) return;
+    if (!form || !form.elements) {
+      console.warn('⚠️ Formulario no encontrado');
+      return;
+    }
 
-    // Normalizar entrada
-    const normalized = text
-      .toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .trim();
+    const normalized = this.normalize(text);
+    console.log('📝 Procesando texto normalizado:', normalized);
 
-    // Detectar campo basado en palabras clave
-    let field = null;
-    let value = null;
+    // Detectar y procesar campos
+    let fieldsFound = 0;
 
-    // Patrones mejorados con mejor captura de valores
-    const patterns = [
-      { regex: /nombre\s*[es:]*\s*(.+?)(?:\s+(?:categoria|ubicacion|cantidad|unidad|precio|fuente)|$)/, field: 'nombre' },
-      { regex: /categoria\s*[es:]*\s*(.+?)(?:\s+(?:subcategoria|ubicacion|cantidad|unidad)|$)/, field: 'categoria' },
-      { regex: /subcategoria\s*[es:]*\s*(.+?)(?:\s+(?:ubicacion|cantidad)|$)/, field: 'subcategoria' },
-      { regex: /ubicacion\s*[es:]*\s*(.+?)(?:\s+(?:cantidad|unidad|precio)|$)/, field: 'ubicacion' },
-      { regex: /cantidad\s*[es:]*\s*(\d+(?:[.,]\d+)?)\s*(?:de\s+)?(.+?)(?:\s+(?:stock|precio|fuente)|$)/, field: 'cantidad', hasUnit: true },
-      { regex: /unidad\s*[es:]*\s*(.+?)(?:\s+(?:stock|precio|fuente)|$)/, field: 'unidad' },
-      { regex: /stock\s*(?:minimo|min)\s*[es:]*\s*(\d+)/, field: 'stockmin' },
-      { regex: /precio\s*[es:]*\s*(\d+(?:[.,]\d+)?)/, field: 'precio' },
-      { regex: /fuente\s*[es:]*\s*(.+?)(?:\s+(?:precio|fecha|notas)|$)/, field: 'fuente' },
-      { regex: /notas\s*[es:]*\s*(.+)/, field: 'notas' },
-    ];
+    for (const [fieldName, keywords] of Object.entries(this.fieldKeywords)) {
+      const formElement = form.elements[fieldName];
+      if (!formElement) continue;
 
-    for (const p of patterns) {
-      const match = normalized.match(p.regex);
-      if (match) {
-        field = p.field;
-        value = (match[1] || '').trim();
+      // Buscar palabra clave
+      for (const keyword of keywords) {
+        if (normalized.includes(keyword)) {
+          // Extraer valor después de la palabra clave
+          const value = this.extractValue(normalized, keyword, fieldName);
 
-        // Manejar unidad si está presente
-        if (p.hasUnit && match[2]) {
-          const unitStr = (match[2] || '').trim();
-          const el = form.elements['unidad'];
-          if (el) {
-            const normalizedUnit = this.normalizeUnit(unitStr);
-            el.value = normalizedUnit;
-            this.showFieldHint('unidad', normalizedUnit);
+          if (value) {
+            this.setFieldValue(formElement, fieldName, value);
+            console.log(`✅ Campo "${fieldName}" = "${value}"`);
+            fieldsFound++;
+
+            // Mostrar notificación
+            if (App && App.showToast) {
+              App.showToast(`✓ ${fieldName}: ${value}`, 'success');
+            }
           }
+          break;
         }
-        break;
       }
     }
 
-    // Asignar valor si encontramos el campo
-    if (field && value && form.elements[field]) {
-      const el = form.elements[field];
-
-      if (field === 'categoria') {
-        const cat = this.findCategory(value);
-        if (cat) {
-          el.value = cat;
-          // Trigger change event para actualizar subcategorías
-          const event = new Event('change', { bubbles: true });
-          el.dispatchEvent(event);
-          App.updateSubcategories(cat);
-          this.showFieldHint(field, CATEGORIES[cat]?.label || value);
-        } else {
-          el.value = value;
-          this.showFieldHint(field, value);
-        }
-      } else if (field === 'cantidad' || field === 'stockmin' || field === 'precio') {
-        el.value = value.replace(',', '.');
-        this.showFieldHint(field, el.value);
-      } else {
-        el.value = value;
-        this.showFieldHint(field, value);
-      }
+    if (fieldsFound === 0 && text.length > 5) {
+      console.log('ℹ️ No se detectaron campos conocidos en:', text);
     }
   },
 
-  findCategory(voiceInput) {
-    const norm = voiceInput.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const keys = Object.keys(CATEGORIES);
-    for (const k of keys) {
-      const label = CATEGORIES[k].label.toLowerCase();
-      if (norm.includes(label) || label.includes(norm)) return k;
+  /**
+   * Extraer valor después de una palabra clave
+   */
+  extractValue(normalized, keyword, fieldName) {
+    try {
+      const regex = new RegExp(`${keyword}\\s*[es:]?\\s*([^\\s][^a-z]*?)(?:\\s+(?:${Object.values(this.fieldKeywords).flat().join('|')})|$)`, 'i');
+      const match = normalized.match(regex);
+
+      if (match && match[1]) {
+        let value = match[1].trim();
+
+        // Limpiar valor
+        value = value.replace(/[es:]+$/, '').trim();
+        value = value.substring(0, 100); // Limitar longitud
+
+        return value;
+      }
+    } catch (err) {
+      console.error(`❌ Error extrayendo valor para ${fieldName}:`, err);
     }
+
     return null;
   },
 
-  normalizeUnit(voiceUnit) {
-    const norm = voiceUnit.toLowerCase().trim();
-    const units = UNITS.map(u => u.value);
-    for (const u of units) {
-      if (norm.includes(u) || u.includes(norm)) return u;
-    }
-    return 'unidad';
-  },
+  /**
+   * Asignar valor a un campo del formulario
+   */
+  setFieldValue(element, fieldName, value) {
+    try {
+      if (!element) return;
 
-  showFieldHint(field, value) {
-    const hints = {
-      nombre: '✓ Nombre del producto agregado',
-      categoria: '✓ Categoría detectada',
-      ubicacion: '✓ Ubicación registrada',
-      cantidad: '✓ Cantidad ingresada',
-      unidad: '✓ Unidad configurada',
-      precio: '✓ Precio registrado',
-    };
-    const msg = hints[field] || `✓ ${field} actualizado`;
-    App.showToast(`${msg}: "${value}"`, 'success');
-  },
+      switch (fieldName) {
+        case 'categoria':
+          const catKey = this.findCategory(value);
+          element.value = catKey || value;
+          // Trigger change para actualizar subcategorías
+          const event = new Event('change', { bubbles: true });
+          element.dispatchEvent(event);
+          if (App && App.updateSubcategories) {
+            App.updateSubcategories(catKey || value);
+          }
+          break;
 
-  start() {
-    if (!this.recognition) this.init();
-    if (this.recognition) {
-      this.isRecording = true;
-      this.recognition.start();
-      this.updateUI();
-    }
-  },
+        case 'cantidad':
+        case 'stockmin':
+        case 'precio':
+          // Normalizar números
+          const numValue = value.replace(/[^\d.,]/g, '').replace(',', '.');
+          element.value = numValue || '';
+          break;
 
-  stop() {
-    if (this.recognition) {
-      this.recognition.stop();
-      this.isRecording = false;
-    }
-    this.updateUI();
-  },
+        default:
+          element.value = value;
+      }
 
-  updateLiveText() {
-    // Mostrar el texto que se está escribiendo en tiempo real
-    const interimEl = document.getElementById('voice-interim');
-    const recordingTextEl = document.getElementById('voice-recording-text');
+      // Trigger input event para validación
+      const inputEvent = new Event('input', { bubbles: true });
+      element.dispatchEvent(inputEvent);
 
-    if (interimEl) {
-      interimEl.textContent = this.interimText || '(escuchando...)';
-      interimEl.style.color = this.interimText ? '#2563EB' : '#9CA3AF';
-    }
-
-    if (recordingTextEl) {
-      const allText = [...this.allTranscripts, this.finalText, this.interimText].filter(Boolean).join(' ');
-      recordingTextEl.innerHTML = `
-        <span style="color: #111827; font-weight: 500;">${this.escapeHtml(allText)}</span>
-        ${this.interimText ? `<span style="color: #9CA3AF; font-style: italic;">${this.escapeHtml(this.interimText)}</span>` : ''}
-      `;
+    } catch (err) {
+      console.error(`❌ Error asignando valor a ${fieldName}:`, err);
     }
   },
 
-  updateUI() {
-    const btn = document.getElementById('voice-record-btn');
-    const mainBtn = document.getElementById('voice-main-record-btn');
-    const status = document.getElementById('voice-status');
-    const indicator = document.getElementById('voice-recording-indicator');
+  /**
+   * Encontrar categoría por nombre
+   */
+  findCategory(voiceInput) {
+    if (!CATEGORIES) return null;
 
-    if (!btn && !mainBtn) return;
+    const norm = this.normalize(voiceInput);
 
-    if (this.isRecording) {
-      if (btn) {
-        btn.innerHTML = '<i class="fas fa-stop-circle animate-pulse text-red-500"></i> Grabando...';
-        btn.classList.add('bg-red-50');
-      }
-      if (mainBtn) {
-        mainBtn.innerHTML = '<i class="fas fa-stop-circle animate-pulse text-white"></i> Grabando... Presiona para detener';
-        mainBtn.style.background = 'linear-gradient(to right, #DC2626, #EF4444)';
-      }
-      if (status) {
-        status.className = 'text-xs text-red-600 font-medium flex items-center gap-1.5';
-        status.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Escuchando tu voz...';
-      }
-      if (indicator) {
-        indicator.innerHTML = '<div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div><span class="text-xs font-medium text-red-600">Grabando</span>';
-      }
-    } else {
-      if (btn) {
-        btn.innerHTML = '<i class="fas fa-microphone"></i> Grabar por voz';
-        btn.classList.remove('bg-red-50');
-      }
-      if (mainBtn) {
-        mainBtn.innerHTML = '<i class="fas fa-microphone text-2xl"></i><span>Presiona para grabar</span>';
-        mainBtn.style.background = 'linear-gradient(to right, #A855F7, #3B82F6)';
-      }
-      if (status) {
-        status.className = 'text-xs text-green-600 font-medium flex items-center gap-1.5';
-        status.innerHTML = '<i class="fas fa-check-circle"></i> Listo para grabar';
-      }
-      if (indicator) {
-        indicator.innerHTML = '<div class="w-2.5 h-2.5 rounded-full bg-green-500"></div><span class="text-xs font-medium text-green-600">Listo</span>';
+    for (const [key, cat] of Object.entries(CATEGORIES)) {
+      const catLabel = this.normalize(cat.label);
+      if (norm.includes(catLabel) || catLabel.includes(norm)) {
+        return key;
       }
     }
+
+    return null;
   },
 
+  /**
+   * Normalizar texto para comparación
+   */
+  normalize(text) {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // Quitar tildes
+      .replace(/[^\w\s]/g, ' ')         // Solo letras, números, espacios
+      .replace(/\s+/g, ' ')             // Espacios múltiples a uno
+      .trim();
+  },
+
+  /**
+   * Escapar HTML
+   */
   escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
   },
 
-  toggleRecording() {
-    if (!this.recognition) this.init();
-    if (!this.recognition) {
-      App.showToast('Speech Recognition no disponible en tu navegador', 'error');
-      return;
-    }
+  /**
+   * Actualizar UI (botones, indicadores)
+   */
+  updateUI() {
+    const buttons = {
+      'voice-record-btn': document.getElementById('voice-record-btn'),
+      'voice-main-record-btn': document.getElementById('voice-main-record-btn'),
+      'quick-voice-btn': document.getElementById('quick-voice-btn'),
+    };
+
+    const status = document.getElementById('voice-status');
+    const indicator = document.getElementById('voice-recording-indicator');
 
     if (this.isRecording) {
+      // Estado grabando
+      if (buttons['voice-record-btn']) {
+        buttons['voice-record-btn'].innerHTML = '<i class="fas fa-stop-circle animate-pulse text-red-500"></i> Detener';
+        buttons['voice-record-btn'].classList.add('bg-red-50', 'border-red-300');
+        buttons['voice-record-btn'].classList.remove('border-blue-300', 'bg-blue-50');
+      }
+
+      if (buttons['voice-main-record-btn']) {
+        buttons['voice-main-record-btn'].innerHTML = '<i class="fas fa-stop-circle animate-pulse text-white"></i> Deteniendo...';
+        buttons['voice-main-record-btn'].style.background = 'linear-gradient(to right, #DC2626, #EF4444)';
+      }
+
+      if (status) {
+        status.innerHTML = '<i class="fas fa-microphone animate-pulse text-red-500"></i> Escuchando tu voz...';
+        status.className = 'text-xs text-red-600 font-semibold flex items-center gap-1.5';
+      }
+
+      if (indicator) {
+        indicator.innerHTML = '<div class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></div><span class="text-xs font-semibold text-red-600">Grabando</span>';
+      }
+    } else {
+      // Estado listo
+      if (buttons['voice-record-btn']) {
+        buttons['voice-record-btn'].innerHTML = '<i class="fas fa-microphone"></i> Grabar';
+        buttons['voice-record-btn'].classList.remove('bg-red-50', 'border-red-300');
+        buttons['voice-record-btn'].classList.add('border-blue-300', 'bg-blue-50');
+      }
+
+      if (buttons['voice-main-record-btn']) {
+        buttons['voice-main-record-btn'].innerHTML = '<i class="fas fa-microphone text-2xl"></i><span>Presiona para grabar</span>';
+        buttons['voice-main-record-btn'].style.background = 'linear-gradient(to right, #A855F7, #3B82F6)';
+      }
+
+      if (status) {
+        status.innerHTML = '<i class="fas fa-check-circle text-green-500"></i> Listo para grabar';
+        status.className = 'text-xs text-green-600 font-semibold flex items-center gap-1.5';
+      }
+
+      if (indicator) {
+        indicator.innerHTML = '<div class="w-2.5 h-2.5 rounded-full bg-green-500"></div><span class="text-xs font-semibold text-green-600">Listo</span>';
+      }
+    }
+  },
+
+  /**
+   * Iniciar grabación
+   */
+  start() {
+    if (!this.recognition) {
+      if (!this.init()) {
+        console.error('❌ No se pudo inicializar Speech Recognition');
+        return;
+      }
+    }
+
+    try {
+      this.recognition.start();
+      console.log('▶️ Grabación iniciada');
+    } catch (err) {
+      if (err.name !== 'InvalidStateError') {
+        console.error('❌ Error iniciando grabación:', err);
+      }
+    }
+  },
+
+  /**
+   * Detener grabación
+   */
+  stop() {
+    if (!this.recognition) return;
+    try {
+      this.recognition.stop();
+      console.log('⏹️ Grabación detenida');
+    } catch (err) {
+      console.error('❌ Error deteniendo grabación:', err);
+    }
+  },
+
+  /**
+   * Alternar grabación (play/pause)
+   */
+  toggleRecording() {
+    if (this.isRecording) {
       this.stop();
-      App.showToast('Grabación detenida', 'info');
     } else {
       this.start();
     }
@@ -299,7 +461,11 @@ const VoiceInput = {
 
 // Inicializar cuando el DOM esté listo
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => VoiceInput.init());
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('🚀 Inicializando VoiceInput...');
+    VoiceInput.init();
+  });
 } else {
+  console.log('🚀 Inicializando VoiceInput...');
   VoiceInput.init();
 }
