@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="grad-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="192" height="192" rx="45" fill="url(#grad-bg)"/>
+
+  <!-- Safe zone indicator -->
+  <rect x="24" y="24" width="144" height="144" rx="36" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+
+  <!-- Inventory stacks (3 boxes) -->
+  <g transform="translate(40, 50)">
+    <!-- Box 1 (top-left) -->
+    <rect x="0" y="0" width="35" height="28" rx="3" fill="rgba(255,255,255,0.95)" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+    <rect x="2" y="2" width="31" height="4" fill="rgba(37, 99, 235, 0.2)"/>
+
+    <!-- Box 2 (top-right) -->
+    <rect x="42" y="8" width="35" height="28" rx="3" fill="rgba(255,255,255,0.9)" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+    <rect x="44" y="10" width="31" height="4" fill="rgba(37, 99, 235, 0.2)"/>
+
+    <!-- Box 3 (bottom) -->
+    <rect x="21" y="42" width="35" height="28" rx="3" fill="rgba(255,255,255,0.85)" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+    <rect x="23" y="44" width="31" height="4" fill="rgba(37, 99, 235, 0.2)"/>
+  </g>
+
+  <!-- Checkmark (bottom-right) -->
+  <g transform="translate(120, 120)">
+    <circle cx="0" cy="0" r="24" fill="#10B981" opacity="0.9"/>
+    <path d="M-8 0 L-2 6 L8 -4" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#2563EB">
+  <meta name="description" content="Sistema de inventario del hogar con sincronización Google Sheets">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>InvenHogar</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font Awesome 6 -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- JsBarcode -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased">
+
+<!-- ═══════════════════════════════════════════════════════ APP SHELL ═══ -->
+<div id="app" class="flex h-screen overflow-hidden">
+
+  <!-- Mobile overlay -->
+  <div id="overlay" class="fixed inset-0 bg-black/50 z-20 hidden lg:hidden"></div>
+
+  <!-- ══════════════════════════════════════════════════ SIDEBAR ══════ -->
+  <aside id="sidebar"
+    class="fixed lg:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 flex flex-col -translate-x-full lg:translate-x-0 shadow-xl lg:shadow-none">
+
+    <!-- Brand -->
+    <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+      <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center shadow-sm">
+        <i class="fas fa-boxes-stacked text-white text-base"></i>
+      </div>
+      <div>
+        <p class="font-bold text-gray-900 tracking-tight">InvenHogar</p>
+        <p class="text-xs text-gray-400">Inventario del Hogar</p>
+      </div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <button class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors" data-section="dashboard">
+        <i class="fas fa-chart-pie w-5 text-center text-gray-400 text-sm"></i>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors" data-section="inventory">
+        <i class="fas fa-list-check w-5 text-center text-gray-400 text-sm"></i>
+        <span>Inventario</span>
+        <span id="badge-inventory" class="ml-auto bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full hidden"></span>
+      </button>
+      <button class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors" data-section="form">
+        <i class="fas fa-plus w-5 text-center text-gray-400 text-sm"></i>
+        <span>Agregar Producto</span>
+      </button>
+      <button class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors" data-section="labels">
+        <i class="fas fa-tag w-5 text-center text-gray-400 text-sm"></i>
+        <span>Etiquetas</span>
+      </button>
+
+      <div class="pt-3 pb-1 px-3">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sistema</p>
+      </div>
+
+      <button class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors" data-section="settings">
+        <i class="fas fa-gear w-5 text-center text-gray-400 text-sm"></i>
+        <span>Configuración</span>
+      </button>
+    </nav>
+
+    <!-- Sync status footer -->
+    <div class="p-4 border-t border-gray-100">
+      <div class="flex items-center justify-between">
+        <div id="sync-status" class="flex items-center gap-2 text-xs text-gray-500">
+          <div class="w-2 h-2 rounded-full bg-gray-300"></div>
+          <span>Sin conectar</span>
+        </div>
+        <button onclick="App.syncNow()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition-colors" title="Sincronizar">
+          <i class="fas fa-rotate text-xs"></i>
+        </button>
+      </div>
+      <p id="last-sync" class="text-xs text-gray-400 mt-0.5"></p>
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════ MAIN ══════════ -->
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <!-- Top bar -->
+    <header class="bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3 sticky top-0 z-10 shadow-sm">
+      <button onclick="App.toggleSidebar()" class="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500">
+        <i class="fas fa-bars"></i>
+      </button>
+
+      <!-- Search -->
+      <div class="flex-1 max-w-md relative">
+        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input id="global-search" type="text" placeholder="Buscar productos, códigos, ubicaciones..."
+          class="w-full pl-8 pr-4 py-2 text-sm bg-gray-100 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+          oninput="App.search(this.value)">
+      </div>
+
+      <div class="flex items-center gap-2 ml-auto">
+        <button id="sync-btn" onclick="App.syncNow()" class="btn-icon" title="Sincronizar con Google Sheets">
+          <i class="fas fa-cloud-arrow-up text-gray-500 text-sm"></i>
+        </button>
+        <div class="flex items-center gap-2">
+        <button id="quick-voice-btn" onclick="App.navigate('voice')"
+          class="hidden sm:flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-3 py-2 rounded-lg transition-colors shadow-sm"
+          title="Agregar producto por voz">
+          <i class="fas fa-microphone text-xs"></i>
+          <span>Por voz</span>
+        </button>
+        <button onclick="App.state.editingItem=null; App.navigate('form')"
+          class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition-colors shadow-sm">
+          <i class="fas fa-plus text-xs"></i>
+          <span class="hidden sm:inline">Agregar</span>
+        </button>
+      </div>
+      </div>
+    </header>
+
+    <!-- Loading bar -->
+    <div id="loading-bar" class="h-0.5 loading-bar hidden"></div>
+
+    <!-- ════════════════════════════════════════════ CONTENT ══════════ -->
+    <main class="flex-1 overflow-y-auto">
+
+      <!-- ─── DASHBOARD ─────────────────────────────────────────── -->
+      <section id="section-dashboard" class="section p-4 lg:p-6 space-y-5">
+
+        <!-- Stats -->
+        <div id="stats-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- rendered by JS -->
+        </div>
+
+        <!-- Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="card p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-1">Productos por Categoría</h3>
+            <p class="text-xs text-gray-400 mb-4">Distribución del inventario</p>
+            <div class="relative" style="height:220px">
+              <canvas id="chart-category"></canvas>
+            </div>
+          </div>
+          <div class="card p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-1">Top Ubicaciones</h3>
+            <p class="text-xs text-gray-400 mb-4">Donde están los productos</p>
+            <div class="relative" style="height:220px">
+              <canvas id="chart-location"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alerts + Recent -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="card p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <i class="fas fa-triangle-exclamation text-amber-500"></i>
+              Alertas de Stock Bajo
+            </h3>
+            <div id="low-stock-list"></div>
+          </div>
+          <div class="card p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <i class="fas fa-clock-rotate-left text-blue-500"></i>
+              Productos Recientes
+            </h3>
+            <div id="recent-items-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── INVENTORY ──────────────────────────────────────────── -->
+      <section id="section-inventory" class="section hidden p-4 lg:p-6 space-y-4">
+
+        <!-- Filters bar -->
+        <div class="card p-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <select id="filter-category" class="filter-select">
+              <option value="">Todas las categorías</option>
+            </select>
+            <select id="filter-location" class="filter-select">
+              <option value="">Todas las ubicaciones</option>
+            </select>
+            <select id="filter-stock" class="filter-select">
+              <option value="">Todo el stock</option>
+              <option value="ok">Stock OK</option>
+              <option value="low">Stock bajo</option>
+              <option value="out">Sin stock</option>
+            </select>
+            <button onclick="App.clearFilters()"
+              class="px-3 py-2 text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+              <i class="fas fa-xmark mr-1"></i>Limpiar
+            </button>
+            <span id="results-count" class="ml-auto text-xs text-gray-400"></span>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="card overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Código</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Producto</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Categoría</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Ubicación</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Stock</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="inventory-tbody" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="6" class="px-4 py-16 text-center text-gray-400">
+                    <i class="fas fa-box-open text-4xl mb-3 block text-gray-300"></i>
+                    <p class="text-sm">No hay productos en el inventario</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── FORM ───────────────────────────────────────────────── -->
+      <section id="section-form" class="section hidden p-4 lg:p-6">
+        <div class="max-w-2xl mx-auto">
+          <div class="card p-6">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 id="form-title" class="text-lg font-bold text-gray-900">Agregar Producto</h2>
+                <p class="text-xs text-gray-400 mt-0.5">Completa los campos o usa voz</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="voice-record-btn" onclick="VoiceInput.toggleRecording()"
+                  class="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-blue-300 bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium transition-colors"
+                  title="Grabar por voz mientras completas el formulario">
+                  <i class="fas fa-microphone"></i>
+                  <span class="hidden sm:inline">Voz</span>
+                </button>
+                <button onclick="App.navigate('inventory')" class="btn-icon text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Voice status -->
+            <div id="voice-container" class="hidden mb-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+              <div id="voice-status" class="text-xs text-gray-600 mb-1.5 flex items-center gap-1.5">
+                <i class="fas fa-check-circle text-green-500"></i> Listo para grabar
+              </div>
+              <p id="voice-interim" class="text-sm text-blue-700 font-medium italic min-h-6"></p>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button type="button" onclick="VoiceInput.toggleRecording()"
+                  class="text-xs px-2.5 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                  Grabar/Detener
+                </button>
+                <button type="button" onclick="App.showToast('Di: nombre: [producto], ubicacion: [donde], cantidad: [num], etc.', 'info')"
+                  class="text-xs px-2.5 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  Ayuda
+                </button>
+              </div>
+            </div>
+
+            <form id="product-form" onsubmit="App.submitForm(event)" class="space-y-4" novalidate>
+
+              <!-- Nombre + Categoría -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="form-group">
+                  <label class="form-label">Nombre del Producto <span class="text-red-500">*</span></label>
+                  <input type="text" name="nombre" required class="form-input" placeholder="Ej: Cinta de embalaje marrón">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Categoría <span class="text-red-500">*</span></label>
+                  <select name="categoria" required class="form-input" onchange="App.updateSubcategories(this.value)">
+                    <option value="">Seleccionar categoría...</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Subcategoría + Ubicación -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="form-group">
+                  <label class="form-label">Subcategoría</label>
+                  <input type="text" name="subcategoria" class="form-input" placeholder="Ej: Cintas y adhesivos" list="subcategory-suggestions">
+                  <datalist id="subcategory-suggestions"></datalist>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Ubicación <span class="text-red-500">*</span></label>
+                  <input type="text" name="ubicacion" required class="form-input" placeholder="Ej: Bodega / Estante 2" list="location-suggestions">
+                  <datalist id="location-suggestions"></datalist>
+                </div>
+              </div>
+
+              <!-- Cantidad + Unidad + Stock Mín -->
+              <div class="grid grid-cols-3 gap-4">
+                <div class="form-group">
+                  <label class="form-label">Cantidad <span class="text-red-500">*</span></label>
+                  <input type="number" name="cantidad" required min="0" step="0.01" class="form-input" placeholder="0">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Unidad</label>
+                  <select name="unidad" class="form-input">
+                    <option value="unidad">Unidad(es)</option>
+                    <option value="pza">Pieza(s)</option>
+                    <option value="caja">Caja(s)</option>
+                    <option value="rollo">Rollo(s)</option>
+                    <option value="litro">Litro(s)</option>
+                    <option value="ml">ml</option>
+                    <option value="kg">kg</option>
+                    <option value="g">gramos</option>
+                    <option value="m">metro(s)</option>
+                    <option value="par">Par(es)</option>
+                    <option value="bolsa">Bolsa(s)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Stock Mín.
+                    <span class="text-gray-400 font-normal">(alerta)</span>
+                  </label>
+                  <input type="number" name="stockmin" min="0" step="0.01" class="form-input" placeholder="1" value="1">
+                </div>
+              </div>
+
+              <!-- Precio + Fuente + Fecha -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="form-group">
+                  <label class="form-label">Precio</label>
+                  <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                    <input type="number" name="precio" min="0" step="0.01" class="form-input pl-6" placeholder="0.00">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Fuente / Tienda</label>
+                  <input type="text" name="fuente" class="form-input" placeholder="Ej: AliExpress" list="source-suggestions">
+                  <datalist id="source-suggestions">
+                    <option value="AliExpress">
+                    <option value="Amazon">
+                    <option value="Sodimac">
+                    <option value="Easy">
+                    <option value="Homecenter">
+                    <option value="Ferretería Local">
+                    <option value="Supermercado">
+                    <option value="Mercado Libre">
+                  </datalist>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Fecha de Compra</label>
+                  <input type="date" name="fechacompra" class="form-input">
+                </div>
+              </div>
+
+              <!-- Notas -->
+              <div class="form-group">
+                <label class="form-label">Notas</label>
+                <textarea name="notas" rows="2" class="form-input" placeholder="Link AliExpress, número de modelo, instrucciones..."></textarea>
+              </div>
+
+              <!-- Hidden fields -->
+              <input type="hidden" name="id" id="form-id">
+              <input type="hidden" name="codigo" id="form-codigo">
+
+              <!-- Barcode preview (edit mode) -->
+              <div id="barcode-preview-section" class="hidden p-4 bg-gray-50 rounded-xl border border-gray-200">
+                <div class="flex items-center justify-between mb-2">
+                  <p class="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                    <i class="fas fa-barcode text-gray-400"></i>
+                    Código de barras del producto
+                  </p>
+                  <button type="button" onclick="App.printSingleLabel()"
+                    class="text-xs text-blue-600 hover:text-blue-700 font-semibold flex items-center gap-1">
+                    <i class="fas fa-print"></i> Imprimir etiqueta
+                  </button>
+                </div>
+                <div class="flex justify-center py-1">
+                  <svg id="form-barcode"></svg>
+                </div>
+                <p id="form-barcode-id" class="text-center text-xs text-gray-400 mt-0.5 font-mono"></p>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex gap-3 pt-2">
+                <button type="submit"
+                  class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 shadow-sm">
+                  <i class="fas fa-save text-sm"></i>
+                  <span id="form-submit-text">Guardar Producto</span>
+                </button>
+                <button type="button" onclick="App.navigate('inventory')"
+                  class="px-6 py-2.5 border border-gray-200 rounded-lg font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── LABELS ─────────────────────────────────────────────── -->
+      <section id="section-labels" class="section hidden p-4 lg:p-6 space-y-4">
+
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-bold text-gray-900">Etiquetas con Código de Barras</h2>
+            <p class="text-sm text-gray-500 mt-0.5">Selecciona productos → imprime → pega en cada artículo</p>
+          </div>
+          <button onclick="App.printLabels()"
+            class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors shadow-sm">
+            <i class="fas fa-print text-sm"></i>
+            Imprimir <span id="selected-count" class="bg-white/20 px-1.5 py-0.5 rounded text-xs font-bold">0</span>
+          </button>
+        </div>
+
+        <!-- Select all + search -->
+        <div class="card p-4">
+          <div class="flex flex-wrap items-center gap-4">
+            <label class="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+              <input type="checkbox" id="select-all-labels" onchange="App.toggleSelectAll(this.checked)"
+                class="w-4 h-4 rounded text-blue-600 border-gray-300">
+              Seleccionar todos
+            </label>
+            <input type="text" id="label-search" placeholder="Buscar producto..."
+              class="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              oninput="App.filterLabels(this.value)">
+          </div>
+        </div>
+
+        <!-- Label selection grid -->
+        <div id="labels-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <p class="col-span-full text-center text-sm text-gray-400 py-12">
+            <i class="fas fa-box-open text-3xl block mb-3 text-gray-300"></i>
+            No hay productos
+          </p>
+        </div>
+      </section>
+
+      <!-- ─── SETTINGS ───────────────────────────────────────────── -->
+      <section id="section-settings" class="section hidden p-4 lg:p-6">
+        <div class="max-w-2xl mx-auto space-y-5">
+
+          <!-- Google Sheets setup -->
+          <div class="card p-6">
+            <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <i class="fas fa-table text-green-500"></i>
+              Google Sheets — Base de Datos
+            </h2>
+            <p class="text-xs text-gray-400 mb-5">Todos los cambios se sincronizan automáticamente</p>
+
+            <!-- Steps -->
+            <div class="mb-5 p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <p class="text-sm font-semibold text-blue-800 mb-2">
+                <i class="fas fa-circle-info mr-1"></i>Cómo configurar (solo una vez):
+              </p>
+              <ol class="text-xs text-blue-700 space-y-1.5 list-decimal list-inside leading-relaxed">
+                <li>Abre <strong>Google Sheets</strong> y crea una hoja nueva</li>
+                <li>Ve a <strong>Extensiones → Apps Script</strong></li>
+                <li>Borra el código existente y pega el contenido de <code class="bg-blue-100 px-1 rounded">apps-script.gs</code></li>
+                <li>Clic en <strong>Implementar → Nueva implementación</strong></li>
+                <li>Tipo: <strong>Aplicación web</strong> · Ejecutar como: <strong>Yo</strong> · Acceso: <strong>Cualquier persona</strong></li>
+                <li>Copia la URL generada y pégala abajo · Guarda</li>
+              </ol>
+            </div>
+
+            <div class="space-y-4">
+              <div class="form-group">
+                <label class="form-label">URL del Apps Script</label>
+                <input type="url" id="settings-script-url" class="form-input"
+                  placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button onclick="App.testConnection()"
+                  class="px-4 py-2 text-sm border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-colors">
+                  <i class="fas fa-plug mr-1.5"></i>Probar conexión
+                </button>
+                <button onclick="App.saveSettings()"
+                  class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold transition-colors">
+                  <i class="fas fa-floppy-disk mr-1.5"></i>Guardar
+                </button>
+              </div>
+              <div id="connection-test-result" class="hidden p-3 rounded-lg text-sm"></div>
+            </div>
+          </div>
+
+          <!-- Data tools -->
+          <div class="card p-6">
+            <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <i class="fas fa-database text-blue-500"></i>
+              Herramientas de Datos
+            </h2>
+            <p class="text-xs text-gray-400 mb-4">Exportar o limpiar datos locales</p>
+            <div class="flex flex-wrap gap-3">
+              <button onclick="App.exportToCSV()"
+                class="px-4 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 font-medium text-gray-700 transition-colors">
+                <i class="fas fa-file-csv mr-1.5 text-green-600"></i>Exportar CSV
+              </button>
+              <button onclick="App.clearLocalData()"
+                class="px-4 py-2 text-sm border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-medium transition-colors">
+                <i class="fas fa-trash mr-1.5"></i>Limpiar datos locales
+              </button>
+            </div>
+          </div>
+
+          <!-- Install PWA -->
+          <div class="card p-6">
+            <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <i class="fas fa-mobile-screen text-purple-500"></i>
+              Instalar como Aplicación
+            </h2>
+            <p class="text-xs text-gray-400 mb-4">Usa InvenHogar sin abrir el navegador</p>
+
+            <button id="pwa-install-btn" onclick="App.installPWA()"
+              class="hidden mb-4 flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors">
+              <i class="fas fa-download"></i>Instalar en este dispositivo
+            </button>
+
+            <div class="grid sm:grid-cols-2 gap-4 text-xs text-gray-600">
+              <div class="p-3 bg-gray-50 rounded-lg">
+                <p class="font-semibold mb-1.5 flex items-center gap-1.5">
+                  <i class="fab fa-android text-green-600"></i>Android (Chrome)
+                </p>
+                <ul class="space-y-1 text-gray-500 list-disc list-inside">
+                  <li>Abre en Chrome</li>
+                  <li>Menú (⋮) → "Agregar a pantalla de inicio"</li>
+                </ul>
+              </div>
+              <div class="p-3 bg-gray-50 rounded-lg">
+                <p class="font-semibold mb-1.5 flex items-center gap-1.5">
+                  <i class="fas fa-desktop text-blue-600"></i>PC (Chrome / Edge)
+                </p>
+                <ul class="space-y-1 text-gray-500 list-disc list-inside">
+                  <li>Busca el ícono <i class="fas fa-display"></i> en la barra</li>
+                  <li>O menú → "Instalar InvenHogar"</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="card p-5">
+            <p class="text-sm font-semibold text-gray-800">InvenHogar v1.0.0</p>
+            <p class="text-xs text-gray-400 mt-0.5">Sistema de inventario del hogar · Sincronización Google Sheets · PWA</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ MODALS ════ -->
+
+<!-- Confirm delete -->
+<div id="modal-confirm" class="modal-overlay hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+    <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-triangle-exclamation text-red-600 text-lg"></i>
+    </div>
+    <h3 class="text-center font-bold text-gray-900 text-base mb-2">Confirmar eliminación</h3>
+    <p id="modal-confirm-text" class="text-center text-sm text-gray-500 mb-6 leading-relaxed">¿Seguro?</p>
+    <div class="flex gap-3">
+      <button onclick="App.closeModal()"
+        class="flex-1 py-2.5 border border-gray-200 rounded-xl font-semibold text-gray-600 hover:bg-gray-50 text-sm">
+        Cancelar
+      </button>
+      <button id="modal-confirm-btn"
+        class="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors">
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode / Label preview -->
+<div id="modal-barcode" class="modal-overlay hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-900">Vista previa de etiqueta</h3>
+      <button onclick="App.closeModal()" class="btn-icon text-gray-400 hover:text-gray-600">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+    <div id="modal-barcode-content" class="flex justify-center"></div>
+    <button onclick="App.printModalLabel()"
+      class="w-full mt-5 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm">
+      <i class="fas fa-print"></i>Imprimir etiqueta
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ TOAST ═════ -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+      <!-- ─── VOICE INPUT ──────────────────────────────────────── -->
+      <section id="section-voice" class="section hidden p-4 lg:p-6">
+        <div class="max-w-2xl mx-auto">
+          <div class="card p-6">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <i class="fas fa-microphone text-purple-600"></i>
+                  Agregar Producto por Voz
+                </h2>
+                <p class="text-sm text-gray-500 mt-1">Di los datos del producto. La app los reconocerá automáticamente.</p>
+              </div>
+              <button onclick="App.navigate('form')" class="btn-icon text-gray-400 hover:text-gray-600">
+                <i class="fas fa-xmark"></i>
+              </button>
+            </div>
+
+            <!-- Recording interface -->
+            <div class="space-y-5">
+              <!-- Recording controls -->
+              <div class="p-5 bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl border-2 border-purple-200">
+                <div class="flex items-center justify-between mb-4">
+                  <p class="text-sm font-semibold text-gray-800">Estado de grabación</p>
+                  <div id="voice-recording-indicator" class="flex items-center gap-2">
+                    <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+                    <span class="text-xs font-medium text-green-600">Listo</span>
+                  </div>
+                </div>
+
+                <button id="voice-main-record-btn" onclick="VoiceInput.toggleRecording()"
+                  class="w-full py-4 px-6 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all transform hover:scale-105 active:scale-95 shadow-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+                  <i class="fas fa-microphone text-2xl"></i>
+                  <span>Presiona para grabar</span>
+                </button>
+
+                <p id="voice-recording-text" class="mt-4 text-center text-gray-600 italic text-sm h-6"></p>
+              </div>
+
+              <!-- Instructions -->
+              <div class="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p class="text-xs font-semibold text-blue-900 mb-2 flex items-center gap-1.5">
+                  <i class="fas fa-lightbulb text-blue-600"></i>
+                  Cómo usar
+                </p>
+                <ul class="text-xs text-blue-800 space-y-1.5 list-disc list-inside">
+                  <li>Presiona el botón y habla naturalmente</li>
+                  <li>Di: <code class="bg-blue-100 px-1 rounded">"nombre: Cinta de embalaje"</code></li>
+                  <li>Di: <code class="bg-blue-100 px-1 rounded">"categoria: ferreteria"</code></li>
+                  <li>Di: <code class="bg-blue-100 px-1 rounded">"ubicacion: Bodega estante 2"</code></li>
+                  <li>Di: <code class="bg-blue-100 px-1 rounded">"cantidad: 5"</code></li>
+                  <li>Sigue con: unidad, stock minimo, precio, fuente, fecha compra, notas</li>
+                  <li>Al terminar presiona el botón para detener</li>
+                </ul>
+              </div>
+
+              <!-- Form preview (same as regular form) -->
+              <form id="voice-product-form" onsubmit="App.submitForm(event)" class="space-y-4" novalidate>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="form-group">
+                    <label class="form-label">Nombre del Producto <span class="text-red-500">*</span></label>
+                    <input type="text" name="nombre" required class="form-input" placeholder="Ej: Cinta de embalaje marrón">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Categoría <span class="text-red-500">*</span></label>
+                    <select name="categoria" required class="form-input" onchange="App.updateSubcategories(this.value)">
+                      <option value="">Seleccionar categoría...</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="form-group">
+                    <label class="form-label">Subcategoría</label>
+                    <input type="text" name="subcategoria" class="form-input" placeholder="Ej: Cintas y adhesivos">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Ubicación <span class="text-red-500">*</span></label>
+                    <input type="text" name="ubicacion" required class="form-input" placeholder="Ej: Bodega / Estante 2">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                  <div class="form-group">
+                    <label class="form-label">Cantidad <span class="text-red-500">*</span></label>
+                    <input type="number" name="cantidad" required min="0" step="0.01" class="form-input" placeholder="0">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Unidad</label>
+                    <select name="unidad" class="form-input">
+                      <option value="unidad">Unidad(es)</option>
+                      <option value="pza">Pieza(s)</option>
+                      <option value="caja">Caja(s)</option>
+                      <option value="rollo">Rollo(s)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Stock Mín.</label>
+                    <input type="number" name="stockmin" min="0" step="0.01" class="form-input" placeholder="1" value="1">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div class="form-group">
+                    <label class="form-label">Precio</label>
+                    <div class="relative">
+                      <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                      <input type="number" name="precio" min="0" step="0.01" class="form-input pl-6" placeholder="0.00">
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Fuente / Tienda</label>
+                    <input type="text" name="fuente" class="form-input" placeholder="Ej: AliExpress">
+                  </div>
+                </div>
+
+                <input type="hidden" name="id">
+                <input type="hidden" name="codigo">
+
+                <div class="flex gap-3 pt-2">
+                  <button type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-save"></i>
+                    Guardar Producto
+                  </button>
+                  <button type="button" onclick="App.navigate('form')"
+                    class="px-6 py-2.5 border border-gray-200 rounded-lg font-semibold text-gray-600 hover:bg-gray-50">
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ MODALS ════ -->
+
+<!-- Confirm delete -->
+<div id="modal-confirm" class="modal-overlay hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+    <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-triangle-exclamation text-red-600 text-lg"></i>
+    </div>
+    <h3 class="text-center font-bold text-gray-900 text-base mb-2">Confirmar eliminación</h3>
+    <p id="modal-confirm-text" class="text-center text-sm text-gray-500 mb-6 leading-relaxed">¿Seguro?</p>
+    <div class="flex gap-3">
+      <button onclick="App.closeModal()"
+        class="flex-1 py-2.5 border border-gray-200 rounded-xl font-semibold text-gray-600 hover:bg-gray-50 text-sm">
+        Cancelar
+      </button>
+      <button id="modal-confirm-btn"
+        class="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold text-sm transition-colors">
+        Eliminar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode / Label preview -->
+<div id="modal-barcode" class="modal-overlay hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="font-bold text-gray-900">Vista previa de etiqueta</h3>
+      <button onclick="App.closeModal()" class="btn-icon text-gray-400 hover:text-gray-600">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+    <div id="modal-barcode-content" class="flex justify-center"></div>
+    <button onclick="App.printModalLabel()"
+      class="w-full mt-5 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 text-sm">
+      <i class="fas fa-print"></i>Imprimir etiqueta
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ TOAST ═════ -->
+<div id="toast" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+<!-- Scripts -->
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
