@@ -238,38 +238,49 @@ const VoiceInput = {
       }
 
       const normalized = this.normalize(text);
-      console.log('📝 Procesando:', normalized);
+      console.log('📝 Procesando: "' + normalized + '"');
 
       // Detectar y procesar campos
       let fieldsFound = 0;
 
+      // Recorrer cada campo del formulario
       for (const [fieldName, keywords] of Object.entries(this.fieldKeywords)) {
         const formElement = form.elements[fieldName];
         if (!formElement) continue;
 
-        // Buscar palabra clave
+        // Buscar cualquier palabra clave para este campo
         for (const keyword of keywords) {
+          // Búsqueda simple: ¿está la palabra clave en el texto?
           if (normalized.includes(keyword)) {
-            // Extraer valor después de la palabra clave
+            console.log(`   Encontrado keyword "${keyword}" para campo "${fieldName}"`);
+
+            // Extraer el valor que viene después
             const value = this.extractValue(normalized, keyword, fieldName);
 
             if (value && value.length > 0) {
               this.setFieldValue(formElement, fieldName, value);
-              console.log(`✅ "${fieldName}" = "${value}"`);
+              console.log(`✅ Campo "${fieldName}" = "${value}"`);
               fieldsFound++;
 
-              // Mostrar notificación (validar que App existe)
+              // Mostrar notificación
               if (typeof App !== 'undefined' && App.showToast) {
                 App.showToast(`✓ ${fieldName}: ${value}`, 'success');
               }
+            } else {
+              console.log(`   ⚠️ No se pudo extraer valor para "${fieldName}"`);
             }
+
+            // Una vez encontrado para este campo, pasar al siguiente
             break;
           }
         }
       }
 
-      if (fieldsFound === 0 && text.length > 5) {
-        console.log('ℹ️ No se detectaron campos en:', text);
+      if (fieldsFound === 0) {
+        console.log('ℹ️ No se detectaron campos en: "' + text + '"');
+        console.log('   Palabras clave disponibles:', Object.values(this.fieldKeywords).flat().join(', '));
+      } else {
+        console.log(`✅ Se llenaron ${fieldsFound} campo(s)`);
       }
     } catch (err) {
       console.error('❌ Error en processVoiceCommand:', err);
@@ -281,20 +292,43 @@ const VoiceInput = {
    */
   extractValue(normalized, keyword, fieldName) {
     try {
-      const regex = new RegExp(`${keyword}\\s*[es:]?\\s*([^\\s][^a-z]*?)(?:\\s+(?:${Object.values(this.fieldKeywords).flat().join('|')})|$)`, 'i');
-      const match = normalized.match(regex);
+      // Patrón simple: buscar la palabra clave y todo lo que viene después
+      const pattern = keyword + '\\s+';
+      const index = normalized.indexOf(keyword);
 
-      if (match && match[1]) {
-        let value = match[1].trim();
+      if (index === -1) return null;
 
-        // Limpiar valor
-        value = value.replace(/[es:]+$/, '').trim();
-        value = value.substring(0, 100); // Limitar longitud
+      // Obtener todo después de la palabra clave
+      let afterKeyword = normalized.substring(index + keyword.length).trim();
 
+      if (!afterKeyword) return null;
+
+      // Limpiar puntuación al inicio
+      afterKeyword = afterKeyword.replace(/^[es:,]+\s*/, '').trim();
+
+      if (!afterKeyword) return null;
+
+      // Buscar dónde termina este valor (cuando encuentra otra palabra clave)
+      let value = afterKeyword;
+
+      // Buscar la próxima palabra clave
+      for (const otherKeyword of Object.values(this.fieldKeywords).flat()) {
+        const otherIndex = afterKeyword.indexOf(otherKeyword);
+        if (otherIndex > 0) { // > 0 para ignorar si es la misma palabra
+          value = afterKeyword.substring(0, otherIndex).trim();
+          break;
+        }
+      }
+
+      value = value.substring(0, 100); // Limitar longitud
+
+      if (value && value.length > 1) {
+        console.log(`   Extrayendo para "${fieldName}": "${value}"`);
         return value;
       }
+
     } catch (err) {
-      console.error(`❌ Error extrayendo valor para ${fieldName}:`, err);
+      console.error(`❌ Error en extractValue:`, err);
     }
 
     return null;
