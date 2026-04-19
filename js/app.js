@@ -808,19 +808,54 @@ const App = {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
     }
+
+    // Capturar evento de instalación (cuando el navegador lo permite)
     window.addEventListener('beforeinstallprompt', (e) => {
+      console.log('📥 beforeinstallprompt detectado');
       e.preventDefault();
       this.state.pwaPrompt = e;
+
+      // Mostrar botón de instalación
       const btn = document.getElementById('pwa-install-btn');
-      if (btn) btn.classList.remove('hidden');
+      if (btn) {
+        btn.classList.remove('hidden');
+        console.log('✅ Botón de instalación visible');
+      }
     });
+
+    // Detectar cuándo ya está instalada
+    window.addEventListener('appinstalled', () => {
+      console.log('✅ App instalada exitosamente');
+      this.state.pwaPrompt = null;
+      const btn = document.getElementById('pwa-install-btn');
+      if (btn) btn.classList.add('hidden');
+      this.showToast('¡InvenHogar instalado! 🎉', 'success');
+    });
+
+    // Detectar si está en modo PWA (instalada)
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      console.log('🏠 Ejecutando como PWA');
+    }
   },
 
   installPWA() {
-    if (this.state.pwaPrompt) {
-      this.state.pwaPrompt.prompt();
-      this.state.pwaPrompt.userChoice.then(() => { this.state.pwaPrompt = null; });
+    if (!this.state.pwaPrompt) {
+      this.showToast('Tu navegador no soporta instalación como app', 'warning');
+      return;
     }
+
+    this.state.pwaPrompt.prompt();
+    this.state.pwaPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        console.log('✅ Usuario aceptó instalación');
+        this.showToast('¡Instalando InvenHogar...', 'success');
+      } else {
+        console.log('❌ Usuario rechazó instalación');
+      }
+      this.state.pwaPrompt = null;
+    }).catch(err => {
+      console.error('❌ Error en instalación:', err);
+    });
   },
 };
 

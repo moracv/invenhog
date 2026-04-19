@@ -513,38 +513,83 @@
           </div>
 
           <!-- Install PWA -->
-          <div class="card p-6">
-            <h2 class="font-bold text-gray-900 mb-1 flex items-center gap-2">
-              <i class="fas fa-mobile-screen text-purple-500"></i>
-              Instalar como Aplicación
-            </h2>
-            <p class="text-xs text-gray-400 mb-4">Usa InvenHogar sin abrir el navegador</p>
-
-            <button id="pwa-install-btn" onclick="App.installPWA()"
-              class="hidden mb-4 flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold text-sm transition-colors">
-              <i class="fas fa-download"></i>Instalar en este dispositivo
-            </button>
-
-            <div class="grid sm:grid-cols-2 gap-4 text-xs text-gray-600">
-              <div class="p-3 bg-gray-50 rounded-lg">
-                <p class="font-semibold mb-1.5 flex items-center gap-1.5">
-                  <i class="fab fa-android text-green-600"></i>Android (Chrome)
-                </p>
-                <ul class="space-y-1 text-gray-500 list-disc list-inside">
-                  <li>Abre en Chrome</li>
-                  <li>Menú (⋮) → "Agregar a pantalla de inicio"</li>
-                </ul>
+          <div class="bg-gradient-to-br from-purple-500 via-purple-600 to-blue-600 rounded-2xl overflow-hidden shadow-lg">
+            <div class="p-8 text-white">
+              <div class="flex items-start justify-between mb-6">
+                <div>
+                  <h2 class="text-2xl font-bold mb-2 flex items-center gap-3">
+                    <i class="fas fa-mobile-screen text-white text-2xl"></i>
+                    Instalar como Aplicación
+                  </h2>
+                  <p class="text-purple-100">Usa InvenHogar sin abrir el navegador</p>
+                </div>
+                <div class="text-4xl opacity-20">
+                  <i class="fas fa-download"></i>
+                </div>
               </div>
-              <div class="p-3 bg-gray-50 rounded-lg">
-                <p class="font-semibold mb-1.5 flex items-center gap-1.5">
-                  <i class="fas fa-desktop text-blue-600"></i>PC (Chrome / Edge)
-                </p>
-                <ul class="space-y-1 text-gray-500 list-disc list-inside">
-                  <li>Busca el ícono <i class="fas fa-display"></i> en la barra</li>
-                  <li>O menú → "Instalar InvenHogar"</li>
-                </ul>
+
+              <button id="pwa-install-btn" onclick="App.installPWA()"
+                class="hidden w-full mb-6 py-3 px-6 bg-white text-purple-600 rounded-xl font-bold text-lg hover:bg-purple-50 transition-all transform hover:scale-105 active:scale-95 shadow-lg flex items-center justify-center gap-2">
+                <i class="fas fa-download text-xl"></i>
+                <span>Instalar InvenHogar Ahora</span>
+              </button>
+
+              <div id="pwa-manual-instructions" class="grid sm:grid-cols-2 gap-4 text-sm">
+                <div class="bg-white/10 backdrop-blur-sm border border-white/20 p-4 rounded-xl">
+                  <p class="font-semibold mb-3 flex items-center gap-2">
+                    <i class="fab fa-android text-green-300"></i>
+                    Android (Chrome)
+                  </p>
+                  <ul class="space-y-2 text-purple-50 text-xs">
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">1</span>
+                      <span>Abre InvenHogar en Chrome</span>
+                    </li>
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">2</span>
+                      <span>Toca el menú (⋮) en la esquina</span>
+                    </li>
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">3</span>
+                      <span>Selecciona "Agregar a pantalla de inicio"</span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="bg-white/10 backdrop-blur-sm border border-white/20 p-4 rounded-xl">
+                  <p class="font-semibold mb-3 flex items-center gap-2">
+                    <i class="fas fa-desktop text-blue-200"></i>
+                    PC (Chrome / Edge)
+                  </p>
+                  <ul class="space-y-2 text-purple-50 text-xs">
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">1</span>
+                      <span>Busca el ícono <i class="fas fa-display text-sm"></i> en la barra</span>
+                    </li>
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">2</span>
+                      <span>O abre el menú (⋮) → "Instalar"</span>
+                    </li>
+                    <li class="flex gap-2">
+                      <span class="inline-block w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-xs flex-shrink-0">3</span>
+                      <span>Se abrirá como aplicación de escritorio</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
+          </div>
+
+          <!-- iPhone instructions (always visible) -->
+          <div class="card p-6">
+            <h3 class="font-bold text-gray-900 mb-3 flex items-center gap-2">
+              <i class="fab fa-apple text-gray-600"></i>
+              iPhone / iPad
+            </h3>
+            <ul class="text-xs text-gray-600 space-y-2 list-disc list-inside">
+              <li>Abre InvenHogar en Safari</li>
+              <li>Toca el botón Compartir (cuadro con flecha)</li>
+              <li>Selecciona "Agregar a pantalla de inicio"</li>
+            </ul>
           </div>
 
           <!-- About -->
