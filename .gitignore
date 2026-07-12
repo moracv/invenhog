@@ -27,3 +27,9 @@ Thumbs.db
 
 # Optional: Exclude apps-script.gs if keeping separate
 # apps-script.gs
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
